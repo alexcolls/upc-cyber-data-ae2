@@ -105,7 +105,7 @@ procesar_pagina_con_grafico <- function(url) {
   print(grafico)
   
   # Guardar datos en un archivo CSV
-  write.csv(enlaces_top, "tabla_top15_enlaces_estado.csv", row.names = FALSE)
+  write.csv(enlaces_top, "tabla_enlaces_Mas_Frecuentes.csv", row.names = FALSE)
   
   # Retornar resultados
   return(list(
