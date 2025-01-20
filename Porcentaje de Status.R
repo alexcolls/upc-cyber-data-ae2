@@ -51,10 +51,14 @@ status_summary <- as.data.frame(table(status_data$Status_Code))
 colnames(status_summary) <- c("Status", "Frequency")
 status_summary$Percentage <- (status_summary$Frequency / sum(status_summary$Frequency)) * 100
 
+# Añadir una columna de etiquetas para el gráfico
+status_summary$Label <- paste0(status_summary$Status, " (", round(status_summary$Percentage, 1), "%)")
+
 # 5. Crear gráfico de tarta
 pie_chart <- ggplot(status_summary, aes(x = "", y = Percentage, fill = Status)) +
   geom_bar(stat = "identity", width = 1) +
   coord_polar(theta = "y") +
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.5), size = 4) +
   labs(title = "Distribución de códigos de estado HTTP") +
   theme_void() +
   theme(legend.title = element_text(size = 10), 
@@ -63,6 +67,11 @@ pie_chart <- ggplot(status_summary, aes(x = "", y = Percentage, fill = Status)) 
 # Mostrar el gráfico
 print(pie_chart)
 
-# Guardar resultados
+# 6. Guardar el gráfico como PDF
+pdf("Distribucion_Codigos_HTTP.pdf", width = 8, height = 6)
+print(pie_chart)
+dev.off()
+
+# Guardar resultados en CSV
 write.csv(status_data, "status_data.csv", row.names = FALSE)
 write.csv(status_summary, "status_summary.csv", row.names = FALSE)
