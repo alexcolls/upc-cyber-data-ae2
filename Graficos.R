@@ -5,7 +5,7 @@ library(ggplot2)
 library(dplyr)
 
 # Función principal
-procesar_pagina_con_grafico <- function(url) {
+procesar_pagina_histograma <- function(url) {
   # Descargar el contenido de la página
   response <- GET(url)
   
@@ -18,101 +18,57 @@ procesar_pagina_con_grafico <- function(url) {
   html_content <- content(response, as = "text", encoding = "UTF-8")
   xml_parsed <- htmlParse(html_content, encoding = "UTF-8")
   
-  # 1. Extraer la cabecera (título)
-  cabecera <- xpathSApply(xml_parsed, "//title", xmlValue)
-  cat("Cabecera:", cabecera, "\n\n")
-  
-  # 2. Extraer enlaces y textos
-  enlaces_texto <- xpathSApply(xml_parsed, "//a", xmlValue)
+  # 1. Extraer enlaces y textos
   enlaces_url <- xpathSApply(xml_parsed, "//a/@href")
-  
-  # Convertir a vectores simples y manejar nulos
-  enlaces_texto[is.null(enlaces_texto)] <- NA
-  enlaces_url[is.null(enlaces_url)] <- NA
-  enlaces_texto <- unlist(enlaces_texto)
   enlaces_url <- unlist(enlaces_url)
   
   # Crear un data frame inicial
   enlaces_df <- data.frame(
     URL = enlaces_url,
-    Texto = enlaces_texto,
     stringsAsFactors = FALSE
   )
   
-  # Ajustar URLs relativas y absolutas
-  enlaces_df$URL <- ifelse(
-    grepl("^http", enlaces_df$URL), 
-    enlaces_df$URL,
-    ifelse(
-      grepl("^//", enlaces_df$URL), 
-      paste0("https:", enlaces_df$URL),
-      ifelse(
-        grepl("^/", enlaces_df$URL), 
-        paste0(url, enlaces_df$URL),
-        NA
-      )
+  # Categorizar URLs como absolutas o relativas
+  enlaces_df <- enlaces_df %>%
+    mutate(
+      Tipo = ifelse(grepl("^http", URL), "Absoluta", "Relativa")
     )
-  )
   
-  # Contar la frecuencia de cada enlace
-  enlaces_recuento <- as.data.frame(table(enlaces_df$URL))
-  colnames(enlaces_recuento) <- c("URL", "Frecuencia")
-  enlaces_unicos <- enlaces_df[!duplicated(enlaces_df$URL), ]
-  tabla_enlaces <- merge(enlaces_unicos, enlaces_recuento, by = "URL", all.x = TRUE)
+  # Contar frecuencias de aparición de las URLs por tipo
+  enlaces_recuento <- enlaces_df %>%
+    group_by(Tipo) %>%
+    summarise(Frecuencia = n())
   
-  # Verificar el estado HTTP de cada enlace
-  tabla_enlaces$Estado <- sapply(tabla_enlaces$URL, function(link) {
-    if (is.na(link)) return(NA)
-    tryCatch({
-      Sys.sleep(1)
-      head_response <- HEAD(link)
-      head_response$status_code
-    }, error = function(e) {
-      return(NA)
-    })
-  })
-  
-  # Filtrar para mostrar los 15 enlaces más frecuentes con frecuencia hasta 6
-  enlaces_top <- tabla_enlaces %>% 
-    arrange(desc(Frecuencia)) %>% 
-    slice_head(n = 15) %>% 
-    filter(Frecuencia <= 6)
-  
-  # Crear gráfico usando ggplot2 con geom_count
-  grafico <- ggplot(enlaces_top, aes(x = reorder(Texto, -Frecuencia), y = Frecuencia, size = Frecuencia, fill = as.factor(Frecuencia))) +
-    geom_point(shape = 21, color = "black") +
-    scale_size_continuous(range = c(3, 10)) +
-    scale_fill_brewer(palette = "Set2") +
+  # Crear histograma con ggplot2
+  histograma <- ggplot(enlaces_recuento, aes(x = Tipo, y = Frecuencia, fill = Tipo)) +
+    geom_bar(stat = "identity", color = "black", width = 0.7) +
+    scale_fill_manual(values = c("Absoluta" = "#1f78b4", "Relativa" = "#33a02c")) +
     labs(
-      title = "Top 15 Enlaces Más Frecuentes",
-      x = "Texto del Enlace",
+      title = "Frecuencia de URLs por Tipo",
+      x = "Tipo de URL",
       y = "Frecuencia",
-      size = "Frecuencia",
-      fill = "Frecuencia"
+      fill = "Tipo de URL"
     ) +
     theme_minimal() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-      axis.title = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"),
       plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-      legend.position = "right"
+      legend.position = "none"
     )
   
-  # Guardar gráfico en PDF
-  ggsave("Enlaces_mas_frecuentes.pdf", grafico, width = 10, height = 6)
+  # Guardar el histograma en un archivo PDF
+  ggsave("Histograma_Frecuencia_URLs.pdf", histograma, width = 8, height = 5)
   
-  # Mostrar gráfico en la consola
-  print(grafico)
-  
-  # Guardar datos en un archivo CSV
-  write.csv(enlaces_top, "tabla_enlaces_Mas_Frecuentes.csv", row.names = FALSE)
+  # Mostrar el histograma en la consola
+  print(histograma)
   
   # Retornar resultados
   return(list(
-    Cabecera = cabecera,
-    TablaEnlaces = enlaces_top
+    TablaFrecuencias = enlaces_recuento
   ))
 }
 
 # Ejecutar la función con una URL de ejemplo
-resultado <- procesar_pagina_con_grafico("https://www.mediawiki.org/wiki/MediaWiki")
+resultado <- procesar_pagina_histograma("https://www.mediawiki.org/wiki/MediaWiki")
+
