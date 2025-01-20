@@ -4,7 +4,7 @@ library(XML)
 library(ggplot2)
 library(dplyr)
 
-# Función principal mejorada con ajustes de tamaño y encabezado
+# Función principal mejorada con ajustes para PDF
 procesar_pagina_histograma <- function(url) {
   # Descargar el contenido de la página
   response <- GET(url)
@@ -72,8 +72,11 @@ procesar_pagina_histograma <- function(url) {
     ) +
     guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) # Separar el título de la leyenda
   
-  # Guardar el histograma en un archivo PDF más pequeño
-  ggsave("Histograma_Frecuencia_URLs_Pequeño.pdf", histograma, width = 6, height = 4) # Tamaño reducido
+  # Crear PDF con el gráfico más pequeño centrado en la página completa
+  pdf("Histograma de Frecuencia.pdf", width = 8.5, height = 11) # Tamaño estándar de una página
+  grid::grid.newpage() # Nueva página en blanco
+  grid::grid.draw(ggplotGrob(histograma)) # Insertar el gráfico
+  dev.off() # Cerrar el archivo PDF
   
   # Mostrar el histograma en la consola
   print(histograma)
@@ -86,6 +89,7 @@ procesar_pagina_histograma <- function(url) {
 
 # Ejecutar la función con una URL de ejemplo
 resultado <- procesar_pagina_histograma("https://www.mediawiki.org/wiki/MediaWiki")
+
 
 
 
