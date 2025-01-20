@@ -4,8 +4,8 @@ library(XML)
 library(ggplot2)
 library(dplyr)
 
-# Función principal
-procesar_pagina_con_grafico <- function(url) {
+# Función principal mejorada con ajustes para PDF
+procesar_pagina_histograma <- function(url) {
   # Descargar el contenido de la página
   response <- GET(url)
   
@@ -18,101 +18,78 @@ procesar_pagina_con_grafico <- function(url) {
   html_content <- content(response, as = "text", encoding = "UTF-8")
   xml_parsed <- htmlParse(html_content, encoding = "UTF-8")
   
-  # 1. Extraer la cabecera (título)
-  cabecera <- xpathSApply(xml_parsed, "//title", xmlValue)
-  cat("Cabecera:", cabecera, "\n\n")
-  
-  # 2. Extraer enlaces y textos
-  enlaces_texto <- xpathSApply(xml_parsed, "//a", xmlValue)
+  # Extraer enlaces
   enlaces_url <- xpathSApply(xml_parsed, "//a/@href")
-  
-  # Convertir a vectores simples y manejar nulos
-  enlaces_texto[is.null(enlaces_texto)] <- NA
-  enlaces_url[is.null(enlaces_url)] <- NA
-  enlaces_texto <- unlist(enlaces_texto)
   enlaces_url <- unlist(enlaces_url)
   
   # Crear un data frame inicial
   enlaces_df <- data.frame(
     URL = enlaces_url,
-    Texto = enlaces_texto,
     stringsAsFactors = FALSE
   )
   
-  # Ajustar URLs relativas y absolutas
-  enlaces_df$URL <- ifelse(
-    grepl("^http", enlaces_df$URL), 
-    enlaces_df$URL,
-    ifelse(
-      grepl("^//", enlaces_df$URL), 
-      paste0("https:", enlaces_df$URL),
-      ifelse(
-        grepl("^/", enlaces_df$URL), 
-        paste0(url, enlaces_df$URL),
-        NA
-      )
+  # Clasificar URLs como absolutas o relativas
+  enlaces_df <- enlaces_df %>%
+    mutate(
+      Tipo = ifelse(grepl("^http", URL), "Absoluta", "Relativa")
     )
-  )
   
-  # Contar la frecuencia de cada enlace
-  enlaces_recuento <- as.data.frame(table(enlaces_df$URL))
-  colnames(enlaces_recuento) <- c("URL", "Frecuencia")
-  enlaces_unicos <- enlaces_df[!duplicated(enlaces_df$URL), ]
-  tabla_enlaces <- merge(enlaces_unicos, enlaces_recuento, by = "URL", all.x = TRUE)
+  # Contar frecuencias de aparición de las URLs por tipo
+  enlaces_recuento <- enlaces_df %>%
+    group_by(Tipo) %>%
+    summarise(Frecuencia = n())
   
-  # Verificar el estado HTTP de cada enlace
-  tabla_enlaces$Estado <- sapply(tabla_enlaces$URL, function(link) {
-    if (is.na(link)) return(NA)
-    tryCatch({
-      Sys.sleep(1)
-      head_response <- HEAD(link)
-      head_response$status_code
-    }, error = function(e) {
-      return(NA)
-    })
-  })
-  
-  # Filtrar para mostrar los 15 enlaces más frecuentes con frecuencia hasta 6
-  enlaces_top <- tabla_enlaces %>% 
-    arrange(desc(Frecuencia)) %>% 
-    slice_head(n = 15) %>% 
-    filter(Frecuencia <= 6)
-  
-  # Crear gráfico usando ggplot2 con geom_count
-  grafico <- ggplot(enlaces_top, aes(x = reorder(Texto, -Frecuencia), y = Frecuencia, size = Frecuencia, fill = as.factor(Frecuencia))) +
-    geom_point(shape = 21, color = "black") +
-    scale_size_continuous(range = c(3, 10)) +
-    scale_fill_brewer(palette = "Set2") +
+  # Crear histograma con diseño profesional y ajustes de tamaño
+  histograma <- ggplot(enlaces_recuento, aes(x = Tipo, y = Frecuencia, fill = Tipo)) +
+    geom_bar(stat = "identity", color = "black", width = 0.5) +
+    scale_fill_manual(values = c("Absoluta" = "#4B9CD3", "Relativa" = "#9ACD32")) +
     labs(
-      title = "Top 15 Enlaces Más Frecuentes",
-      x = "Texto del Enlace",
+      title = "Frecuencia de URLs por Tipo",
+      subtitle = "Comparación entre URLs absolutas y relativas",
+      x = "Tipo de URL",
       y = "Frecuencia",
-      size = "Frecuencia",
-      fill = "Frecuencia"
+      fill = "Tipo de URL"
     ) +
-    theme_minimal() +
+    theme_minimal(base_size = 12) +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-      axis.title = element_text(size = 12, face = "bold"),
-      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-      legend.position = "right"
-    )
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+      axis.text.x = element_text(size = 10, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.x = element_text(size = 12, face = "bold", margin = margin(t = 10)),
+      axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 10)),
+      legend.position = "top",
+      legend.title = element_text(size = 10, face = "bold"),
+      legend.text = element_text(size = 10),
+      plot.margin = margin(10, 10, 10, 10) # Reducir márgenes
+    ) +
+    geom_text(
+      aes(label = Frecuencia), 
+      vjust = -0.5, 
+      size = 4, 
+      color = "black",
+      fontface = "bold"
+    ) +
+    guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) # Separar el título de la leyenda
   
-  # Guardar gráfico en PDF
-  ggsave("Enlaces_mas_frecuentes.pdf", grafico, width = 10, height = 6)
+  # Crear PDF con el gráfico más pequeño centrado en la página completa
+  pdf("Histograma de Frecuencia.pdf", width = 8.5, height = 11) # Tamaño estándar de una página
+  grid::grid.newpage() # Nueva página en blanco
+  grid::grid.draw(ggplotGrob(histograma)) # Insertar el gráfico
+  dev.off() # Cerrar el archivo PDF
   
-  # Mostrar gráfico en la consola
-  print(grafico)
-  
-  # Guardar datos en un archivo CSV
-  write.csv(enlaces_top, "tabla_enlaces_Mas_Frecuentes.csv", row.names = FALSE)
+  # Mostrar el histograma en la consola
+  print(histograma)
   
   # Retornar resultados
   return(list(
-    Cabecera = cabecera,
-    TablaEnlaces = enlaces_top
+    TablaFrecuencias = enlaces_recuento
   ))
 }
 
 # Ejecutar la función con una URL de ejemplo
-resultado <- procesar_pagina_con_grafico("https://www.mediawiki.org/wiki/MediaWiki")
+resultado <- procesar_pagina_histograma("https://www.mediawiki.org/wiki/MediaWiki")
+
+
+
+
